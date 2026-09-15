@@ -1,0 +1,74 @@
+bundle:
+  name: concert-recommender-scala
+
+variables:
+  cluster_id:
+    description: Existing Databricks cluster ID compatible with the compiled JAR
+
+artifacts:
+  default:
+    type: jar
+    build: sbt clean test assembly
+    path: .
+    files:
+      - source: ./target/scala-2.13/concert-recommender-scala-0.1.0.jar
+
+resources:
+  jobs:
+    concert_recommender_bronze_stream:
+      name: concert-recommender-bronze-stream
+      tasks:
+        - task_key: ingest_kafka
+          existing_cluster_id: ${var.cluster_id}
+          spark_jar_task:
+            main_class_name: com.acme.concertrec.jobs.StreamingIngestionJob
+          libraries:
+            - jar: ./target/scala-2.13/concert-recommender-scala-0.1.0.jar
+
+    concert_recommender_silver_stream:
+      name: concert-recommender-silver-stream
+      tasks:
+        - task_key: parse_silver
+          existing_cluster_id: ${var.cluster_id}
+          spark_jar_task:
+            main_class_name: com.acme.concertrec.jobs.SilverStreamingJob
+          libraries:
+            - jar: ./target/scala-2.13/concert-recommender-scala-0.1.0.jar
+
+    concert_recommender_training:
+      name: concert-recommender-training
+      tasks:
+        - task_key: train_als
+          existing_cluster_id: ${var.cluster_id}
+          spark_jar_task:
+            main_class_name: com.acme.concertrec.jobs.TrainALSJob
+          libraries:
+            - jar: ./target/scala-2.13/concert-recommender-scala-0.1.0.jar
+
+    concert_recommender_ranker_training:
+      name: concert-recommender-ranker-training
+      tasks:
+        - task_key: build_ranker_training
+          existing_cluster_id: ${var.cluster_id}
+          spark_jar_task:
+            main_class_name: com.acme.concertrec.jobs.BuildRankerTrainingJob
+          libraries:
+            - jar: ./target/scala-2.13/concert-recommender-scala-0.1.0.jar
+        - task_key: train_ranker
+          depends_on:
+            - task_key: build_ranker_training
+          existing_cluster_id: ${var.cluster_id}
+          spark_jar_task:
+            main_class_name: com.acme.concertrec.jobs.TrainRankerJob
+          libraries:
+            - jar: ./target/scala-2.13/concert-recommender-scala-0.1.0.jar
+
+    concert_recommender_scoring:
+      name: concert-recommender-scoring
+      tasks:
+        - task_key: recommend
+          existing_cluster_id: ${var.cluster_id}
+          spark_jar_task:
+            main_class_name: com.acme.concertrec.jobs.RecommendationJob
+          libraries:
+            - jar: ./target/scala-2.13/concert-recommender-scala-0.1.0.jar
